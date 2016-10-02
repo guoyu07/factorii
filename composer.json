@@ -1,0 +1,25 @@
+{
+  "name": "ddinchev/factorii",
+  "description": "Yii 2.0 test db fixtures replacement library. Roughly based on Laravel's model factories.",
+  "require": {
+    "php": ">=5.5.0",
+    "yiisoft/yii2": "~2.0.0",
+    "fzaninotto/faker": "^1.6"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "~5"
+  },
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Dimitar Dinchev",
+      "email": "dinchev.dimitar@gmail.com"
+    }
+  ],
+  "minimum-stability": "stable",
+  "autoload": {
+    "psr-4": {
+      "ddinchev\\factorii\\": "src/"
+    }
+  }
+}
