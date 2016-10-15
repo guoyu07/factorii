@@ -3,13 +3,21 @@
 namespace ddinchev\factorii;
 
 use ArrayAccess;
-use yii\base\Component;
 use Yii;
+use yii\base\Component;
 use yii\base\InvalidParamException;
+use yii\base\Object;
+use yii\di\Instance;
 use yii\helpers\FileHelper;
 
-class Factory extends Component implements ArrayAccess
+class Factorii extends Component implements ArrayAccess
 {
+    /**
+     * @var \yii\db\Connection|array|string the DB connection object or the application component ID of the DB connection.
+     * After the Factorii object is created, if you want to change this property, you should only assign it
+     * with a DB connection object.
+     */
+    public $db = 'db';
     /**
      * @var string Path to factories directory.
      */
@@ -18,6 +26,10 @@ class Factory extends Component implements ArrayAccess
      * @var string Language to use when generating fixtures data.
      */
     public $language;
+    /**
+     * @var bool By default disable integrity checks when creating records.
+     */
+    public $disableIntegrityChecks = true;
     /**
      * @var \Faker\Generator Faker generator instance
      */
@@ -31,6 +43,7 @@ class Factory extends Component implements ArrayAccess
 
     public function init()
     {
+        $this->db = Instance::ensure($this->db, Object::className());
         $factoriesPath = $this->factoriesPath ? Yii::getAlias($this->factoriesPath) : null;
         if ($factoriesPath) {
             $this->load($factoriesPath);
@@ -47,57 +60,59 @@ class Factory extends Component implements ArrayAccess
         if (!is_dir($path)) {
             throw new InvalidParamException("Factories path \"$path\" must be a dir.");
         }
-        $factory = $this;
+        $factorii = $this;
         $files = FileHelper::findFiles($path, ['only' => ['*.php']]);
         foreach ($files as $file) {
             require $file;
         }
-        return $factory;
+        return $factorii;
     }
 
     /**
-     * Define a class with a given short-name.
+     * Deleted all the data for all defined (user or unused) factories.
+     */
+    public function flushAll() {
+        foreach (array_keys($this->definitions) as $modelClass) {
+            $this->resetTable($modelClass);
+        }
+    }
+
+    /**
+     * Removes all existing data from the specified table and resets sequence number to 1 (if any).
+     * This method is called before populating fixture data into the table associated with this fixture.
+     * @param string $modelClass should be subclass of \yii\db\ActiveRecord
+     */
+    public function resetTable($modelClass)
+    {
+        $tableName = $modelClass::tableName();
+        $table = $this->db->getTableSchema($tableName);
+        $this->db->createCommand()->delete($table->fullName)->execute();
+        if ($table->sequenceName !== null) {
+            $this->db->createCommand()->resetSequence($table->fullName, 1)->execute();
+        }
+    }
+
+    /**
+     * Define a class with a given set of base attributes.
      * @param string $class
-     * @param string $name
      * @param callable $attributes
+     * @param string $alias
      */
-    public function defineAs($class, $name, callable $attributes)
+    public function define($class, callable $attributes, $alias = 'default')
     {
-        $this->define($class, $attributes, $name);
-    }
-
-    /**
-     * Define a class with a given set of attributes.
-     * @param  string $class
-     * @param  callable $attributes
-     * @param  string $name
-     */
-    public function define($class, callable $attributes, $name = 'default')
-    {
-        $this->definitions[$class][$name] = $attributes;
+        $this->definitions[$class][$alias] = $attributes;
     }
 
     /**
      * Create an instance of the given model and persist it to the database.
-     * @param  string $class
-     * @param  array $attributes
+     * @param string $class
+     * @param array $attributes
+     * @param string $alias
      * @return mixed
      */
-    public function create($class, array $attributes = [])
+    public function create($class, array $attributes = [], $alias = 'default')
     {
-        return $this->of($class)->create($attributes);
-    }
-
-    /**
-     * Create an instance of the given model and type and persist it to the database.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return mixed
-     */
-    public function createAs($class, $name, array $attributes = [])
-    {
-        return $this->of($class, $name)->create($attributes);
+        return $this->of($class, $alias)->create($attributes);
     }
 
     /**
@@ -106,32 +121,21 @@ class Factory extends Component implements ArrayAccess
      * @param array $attributes
      * @return \yii\db\ActiveRecord[]
      */
-    public function createMultiple($class, $count, array $attributes = [])
+    public function createList($class, $count, array $attributes = [])
     {
-        return $this->of($class)->createMultiple($count, $attributes);
+        return $this->of($class)->createList($count, $attributes);
     }
 
     /**
      * Create an instance of the given model.
-     * @param  string $class
-     * @param  array $attributes
-     * @return mixed
+     * @param string $class
+     * @param array $attributes
+     * @param string $alias
+     * @return \yii\db\ActiveRecord
      */
-    public function make($class, array $attributes = [])
+    public function build($class, array $attributes = [], $alias = 'default')
     {
-        return $this->of($class)->make($attributes);
-    }
-
-    /**
-     * Create an instance of the given model and type.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return mixed
-     */
-    public function makeAs($class, $name, array $attributes = [])
-    {
-        return $this->of($class, $name)->make($attributes);
+        return $this->of($class, $alias)->build($attributes);
     }
 
     /**
@@ -141,33 +145,21 @@ class Factory extends Component implements ArrayAccess
      * @param  array $attributes
      * @return mixed
      */
-    public function makeMultiple($class, $count, array $attributes = [])
+    public function makeList($class, $count, array $attributes = [])
     {
-        return $this->of($class)->makeMultiple($count, $attributes);
-    }
-
-    /**
-     * Get the raw attribute array for a given named model.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return array
-     */
-    public function rawOf($class, $name, array $attributes = [])
-    {
-        return $this->raw($class, $attributes, $name);
+        return $this->of($class)->buildList($count, $attributes);
     }
 
     /**
      * Get the raw attribute array for a given model.
      * @param  string $class
      * @param  array $attributes
-     * @param  string $name
+     * @param  string $alias
      * @return array
      */
-    public function raw($class, array $attributes = [], $name = 'default')
+    public function attributes($class, array $attributes = [], $alias = 'default')
     {
-        $raw = call_user_func($this->definitions[$class][$name], $this->getGenerator());
+        $raw = call_user_func($this->definitions[$class][$alias], $this->getGenerator());
         return array_merge($raw, $attributes);
     }
 
@@ -175,12 +167,12 @@ class Factory extends Component implements ArrayAccess
      * Create a builder for the given model.
      *
      * @param  string $class
-     * @param  string $name
+     * @param  string $alias
      * @return FactoryBuilder
      */
-    public function of($class, $name = 'default')
+    public function of($class, $alias = 'default')
     {
-        return new FactoryBuilder($class, $name, $this->definitions, $this->getGenerator());
+        return new FactoryBuilder($class, $alias, $this->definitions, $this->getGenerator());
     }
 
     /**
@@ -214,7 +206,7 @@ class Factory extends Component implements ArrayAccess
      */
     public function offsetGet($offset)
     {
-        return $this->make($offset);
+        return $this->build($offset);
     }
 
     /**
