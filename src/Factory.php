@@ -8,7 +8,7 @@ use Yii;
 use yii\base\InvalidParamException;
 use yii\helpers\FileHelper;
 
-class Factory extends Component implements ArrayAccess
+class Factorii extends Component implements ArrayAccess
 {
     /**
      * @var string Path to factories directory.
@@ -56,48 +56,26 @@ class Factory extends Component implements ArrayAccess
     }
 
     /**
-     * Define a class with a given short-name.
+     * Define a class with a given set of base attributes.
      * @param string $class
-     * @param string $name
      * @param callable $attributes
+     * @param string $alias
      */
-    public function defineAs($class, $name, callable $attributes)
+    public function define($class, callable $attributes, $alias = 'default')
     {
-        $this->define($class, $attributes, $name);
-    }
-
-    /**
-     * Define a class with a given set of attributes.
-     * @param  string $class
-     * @param  callable $attributes
-     * @param  string $name
-     */
-    public function define($class, callable $attributes, $name = 'default')
-    {
-        $this->definitions[$class][$name] = $attributes;
+        $this->definitions[$class][$alias] = $attributes;
     }
 
     /**
      * Create an instance of the given model and persist it to the database.
-     * @param  string $class
-     * @param  array $attributes
+     * @param string $class
+     * @param array $attributes
+     * @param string $alias
      * @return mixed
      */
-    public function create($class, array $attributes = [])
+    public function create($class, array $attributes = [], $alias = 'default')
     {
-        return $this->of($class)->create($attributes);
-    }
-
-    /**
-     * Create an instance of the given model and type and persist it to the database.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return mixed
-     */
-    public function createAs($class, $name, array $attributes = [])
-    {
-        return $this->of($class, $name)->create($attributes);
+        return $this->of($class, $alias)->create($attributes);
     }
 
     /**
@@ -106,32 +84,21 @@ class Factory extends Component implements ArrayAccess
      * @param array $attributes
      * @return \yii\db\ActiveRecord[]
      */
-    public function createMultiple($class, $count, array $attributes = [])
+    public function createList($class, $count, array $attributes = [])
     {
-        return $this->of($class)->createMultiple($count, $attributes);
+        return $this->of($class)->createList($count, $attributes);
     }
 
     /**
      * Create an instance of the given model.
-     * @param  string $class
-     * @param  array $attributes
-     * @return mixed
+     * @param string $class
+     * @param array $attributes
+     * @param string $alias
+     * @return \yii\db\ActiveRecord
      */
-    public function make($class, array $attributes = [])
+    public function make($class, array $attributes = [], $alias = 'default')
     {
-        return $this->of($class)->make($attributes);
-    }
-
-    /**
-     * Create an instance of the given model and type.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return mixed
-     */
-    public function makeAs($class, $name, array $attributes = [])
-    {
-        return $this->of($class, $name)->make($attributes);
+        return $this->of($class, $alias)->build($attributes);
     }
 
     /**
@@ -141,33 +108,21 @@ class Factory extends Component implements ArrayAccess
      * @param  array $attributes
      * @return mixed
      */
-    public function makeMultiple($class, $count, array $attributes = [])
+    public function makeList($class, $count, array $attributes = [])
     {
-        return $this->of($class)->makeMultiple($count, $attributes);
-    }
-
-    /**
-     * Get the raw attribute array for a given named model.
-     * @param  string $class
-     * @param  string $name
-     * @param  array $attributes
-     * @return array
-     */
-    public function rawOf($class, $name, array $attributes = [])
-    {
-        return $this->raw($class, $attributes, $name);
+        return $this->of($class)->buildList($count, $attributes);
     }
 
     /**
      * Get the raw attribute array for a given model.
      * @param  string $class
      * @param  array $attributes
-     * @param  string $name
+     * @param  string $alias
      * @return array
      */
-    public function raw($class, array $attributes = [], $name = 'default')
+    public function attributes($class, array $attributes = [], $alias = 'default')
     {
-        $raw = call_user_func($this->definitions[$class][$name], $this->getGenerator());
+        $raw = call_user_func($this->definitions[$class][$alias], $this->getGenerator());
         return array_merge($raw, $attributes);
     }
 
@@ -175,12 +130,12 @@ class Factory extends Component implements ArrayAccess
      * Create a builder for the given model.
      *
      * @param  string $class
-     * @param  string $name
+     * @param  string $alias
      * @return FactoryBuilder
      */
-    public function of($class, $name = 'default')
+    public function of($class, $alias = 'default')
     {
-        return new FactoryBuilder($class, $name, $this->definitions, $this->getGenerator());
+        return new FactoryBuilder($class, $alias, $this->definitions, $this->getGenerator());
     }
 
     /**
