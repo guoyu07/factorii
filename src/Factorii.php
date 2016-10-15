@@ -3,13 +3,21 @@
 namespace ddinchev\factorii;
 
 use ArrayAccess;
-use yii\base\Component;
 use Yii;
+use yii\base\Component;
 use yii\base\InvalidParamException;
+use yii\base\Object;
+use yii\di\Instance;
 use yii\helpers\FileHelper;
 
 class Factorii extends Component implements ArrayAccess
 {
+    /**
+     * @var \yii\db\Connection|array|string the DB connection object or the application component ID of the DB connection.
+     * After the Factorii object is created, if you want to change this property, you should only assign it
+     * with a DB connection object.
+     */
+    public $db = 'db';
     /**
      * @var string Path to factories directory.
      */
@@ -18,6 +26,10 @@ class Factorii extends Component implements ArrayAccess
      * @var string Language to use when generating fixtures data.
      */
     public $language;
+    /**
+     * @var bool By default disable integrity checks when creating records.
+     */
+    public $disableIntegrityChecks = true;
     /**
      * @var \Faker\Generator Faker generator instance
      */
@@ -31,6 +43,7 @@ class Factorii extends Component implements ArrayAccess
 
     public function init()
     {
+        $this->db = Instance::ensure($this->db, Object::className());
         $factoriesPath = $this->factoriesPath ? Yii::getAlias($this->factoriesPath) : null;
         if ($factoriesPath) {
             $this->load($factoriesPath);
@@ -47,12 +60,36 @@ class Factorii extends Component implements ArrayAccess
         if (!is_dir($path)) {
             throw new InvalidParamException("Factories path \"$path\" must be a dir.");
         }
-        $factory = $this;
+        $factorii = $this;
         $files = FileHelper::findFiles($path, ['only' => ['*.php']]);
         foreach ($files as $file) {
             require $file;
         }
-        return $factory;
+        return $factorii;
+    }
+
+    /**
+     * Deleted all the data for all defined (user or unused) factories.
+     */
+    public function flushAll() {
+        foreach (array_keys($this->definitions) as $modelClass) {
+            $this->resetTable($modelClass);
+        }
+    }
+
+    /**
+     * Removes all existing data from the specified table and resets sequence number to 1 (if any).
+     * This method is called before populating fixture data into the table associated with this fixture.
+     * @param string $modelClass should be subclass of \yii\db\ActiveRecord
+     */
+    public function resetTable($modelClass)
+    {
+        $tableName = $modelClass::tableName();
+        $table = $this->db->getTableSchema($tableName);
+        $this->db->createCommand()->delete($table->fullName)->execute();
+        if ($table->sequenceName !== null) {
+            $this->db->createCommand()->resetSequence($table->fullName, 1)->execute();
+        }
     }
 
     /**
@@ -96,7 +133,7 @@ class Factorii extends Component implements ArrayAccess
      * @param string $alias
      * @return \yii\db\ActiveRecord
      */
-    public function make($class, array $attributes = [], $alias = 'default')
+    public function build($class, array $attributes = [], $alias = 'default')
     {
         return $this->of($class, $alias)->build($attributes);
     }
@@ -169,7 +206,7 @@ class Factorii extends Component implements ArrayAccess
      */
     public function offsetGet($offset)
     {
-        return $this->make($offset);
+        return $this->build($offset);
     }
 
     /**
