@@ -145,7 +145,7 @@ class Factorii extends Component implements ArrayAccess
      * @param  array $attributes
      * @return mixed
      */
-    public function makeList($class, $count, array $attributes = [])
+    public function buildList($class, $count, array $attributes = [])
     {
         return $this->of($class)->buildList($count, $attributes);
     }
